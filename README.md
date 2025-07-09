@@ -194,6 +194,8 @@ Input: user_token, code
 
 > This project was developed as part of **CSE540 - Cloud Computing**. Group members: **Dhairya Shah, Aayushi Shah, Khwahish Patel, Krishang Shah, and Vraj Desai**.
 
+---
+
 ## 💬 Feedback & Contribution
 
 Pull requests, issue reports, and suggestions are welcome!  
