@@ -1,204 +1,65 @@
+# GoRemote
 
-# 🔐 GoRemote: Secure & Scalable Remote Code Execution Platform
+A remote code execution platform for Go. Users sign in, save Go programs and run them in their own Docker container. An ontology-based check screens code for malicious patterns before it runs, and nginx spreads requests across two execution servers, one written in Go and one in Rust.
 
-GoRemote is a secure, scalable, and resilient platform for remote code execution, specializing in **Go language** support. It provides **low-latency**, **isolated**, and **malware-resistant** execution environments powered by Docker, MongoDB, and semantic OWL reasoning. Designed for high availability and real-time monitoring, GoRemote is built to handle large-scale, concurrent workloads safely.
+Built as a group project for CSE540 Cloud Computing at Ahmedabad University.
 
----
-
-## 📌 Table of Contents
-
-- [🎯 Overview](#-overview)
-- [🚀 Features](#-features)
-- [🛠️ Architecture](#-architecture)
-- [🧱 Components](#-components)
-- [⚙️ Technologies Used](#️-technologies-used)
-- [☁️ Cloud Services](#-cloud-services)
-- [📜 Algorithms & Flow](#-algorithms--flow)
-- [💻 Hardware & Software Setup](#-hardware--software-setup)
-- [🗃️ Database Schema](#-database-schema)
-- [📈 Future Enhancements](#-future-enhancements)
-
----
-
-## 🎯 Overview
-
-**GoRemote** provides:
-- 🚀 Fast and secure execution of Go code
-- 🐳 Docker-based isolation for each user
-- 🧠 Malware detection via OWL-based reasoning engine
-- ⚖️ Smart request distribution using nginx load balancer
-- 💾 Persistent storage of user, code, and logs in MongoDB
-- ♻️ Auto-removal of idle containers to optimize performance
-
----
-
-## 🚀 Features
-
-- **User Authentication**: Register/Login/Logout using JWT & password hashing.
-- **Code Management**: Create, Read, Update, and Delete Go code snippets.
-- **Secure Execution**: Dockerized containers per user ensure safe, isolated execution.
-- **Malware Detection**: Python-based OWL engine flags malicious code before execution.
-- **Load Balancing**: nginx routes requests to Go/Rust servers in round-robin fashion.
-- **Auto Cleanup**: Docker containers are stopped after 10 minutes of inactivity.
-- **Comprehensive Logging**: All actions and outputs are logged and stored.
-
----
-
-## 🛠️ Architecture
+## How it works
 
 ```
-Client → Authorization (JWT) → Ontology Check (OWL)
-     → nginx Load Balancer → Go/Rust Execution Servers (Docker)
-     → MongoDB for Code, Logs, Users
+Client ──► Ontology check (Python, OWL)  ──► nginx (round-robin)
+                                               ├─► Go server   (chi)        ─┐
+                                               └─► Rust server (actix-web)  ─┼─► Docker container per user
+                                                                             └─► MongoDB (users, code, output)
 ```
 
-- **Router VM**: nginx + Reverse Proxy + Resource Allocator
-- **Execution VMs**: Go & Rust servers running code in Docker containers
-- **Ontology Module**: Detects malicious code using OWL semantic analysis
-- **Database VM**: MongoDB for persistent storage
+1. The client signs in with email and password. Passwords are stored as SHA-3 hashes in MongoDB.
+2. Submitted code goes to the ontology service, which checks it against rules in an OWL dataset and rejects anything flagged as malicious.
+3. nginx forwards the request to one of the two execution servers in turn.
+4. The server reuses the user's container or creates one, copies the code in, runs it and returns the output. The code and its output are saved to MongoDB.
+5. Containers idle for 10 minutes are stopped and removed; a background job checks every 5 minutes.
 
----
+## API (Go server)
 
-## 🧱 Components
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/register`, `/login`, `/logout` | Account and session |
+| `POST` | `/new` | Save a new program |
+| `GET` | `/get-files`, `/get-code` | List programs, read one |
+| `PUT` | `/update-code` | Edit a program |
+| `DELETE` | `/delete-code` | Delete a program |
+| `POST` | `/execute`, `/run` | Run code in the user's container |
 
-### 1. 🔐 Authorization Module
-- Handles user registration, login, logout
-- Stores hashed credentials and session tokens in MongoDB
+The Rust server implements the same account and execution flow with actix-web.
 
-### 2. 🧠 Ontology Module
-- Uses OWL (Web Ontology Language) + rule engine
-- Detects suspicious or malicious code patterns
+## Repository layout
 
-### 3. 🌐 Router VM
-- nginx handles load balancing and reverse proxying
-- Routes to least-burdened execution server
-
-### 4. 🧪 Execution VMs
-- Docker containers per user
-- Reuses containers for better performance
-- Executes Go code (Rust server also present for future scaling)
-
-### 5. 💾 MongoDB
-- Stores users, sessions, code, execution logs, and output
-
----
-
-## ⚙️ Technologies Used
-
-| Purpose                | Tech Stack                |
-|------------------------|---------------------------|
-| Server-side Execution  | Go, Rust                  |
-| Malware Detection      | Python + OWL              |
-| Containerization       | Docker                    |
-| Load Balancing         | nginx                     |
-| Persistence            | MongoDB                   |
-| API & Routing          | chi router (Go)           |
-| Authentication         | JWT, bcrypt               |
-
----
-
-## ☁️ Cloud Services
-
-| Category               | Cloud Service             |
-|------------------------|---------------------------|
-| Hosting                | PaaS for Go/Rust servers  |
-| Database               | MongoDB (Self-hosted/Atlas) |
-| Ontology               | OWL-based Python service  |
-| Authorization          | Custom Auth Service       |
-| Execution              | Docker on Execution VMs   |
-| Routing                | nginx                     |
-
----
-
-## 📜 Algorithms & Flow
-
-### 🔁 Main Flow
 ```
-Start → Listen for Request → Process_Request(Request)
+go-server/    Go execution server (chi, Docker SDK, MongoDB driver)
+rs-server/    Rust execution server (actix-web, Docker, MongoDB)
+nginx/        Load balancer config for the two servers
+data/         Ontology service (Flask + rdflib), OWL dataset and data generators
 ```
 
-### 🔐 Process_Request(Request)
-```pseudo
-Input: user_token, code
-→ Authorize_User(user_token)
-  → If fail, return "Authorization Failed"
-→ Malicious_Code_Check(code)
-  → If malicious, return "Malicious Code Detected"
-→ Route_To_Execution_Server(user_id, code)
-  → Execute code in container
-→ Return code output to client
-```
+## Tech
 
-### ⚖️ Route_To_Execution_Server
-```pseudo
-→ nginx selects least-loaded server
-→ Create or reuse Docker container
-→ Copy code and execute inside container
-→ Capture and return output
-```
+Go, Rust, Python, Docker, MongoDB, nginx, OWL/RDF (rdflib), Flask.
 
-### 📝 Update_MongoDB
-```pseudo
-→ Save user_id, file_path, code, output, logs to MongoDB
-```
+## Deployment used for the project
 
----
+| Machine | Role |
+|---|---|
+| Router VM | nginx load balancer and reverse proxy |
+| Execution VM 1 | Go server and Docker |
+| Execution VM 2 | Rust server and Docker |
+| Database VM | MongoDB |
 
-## 💻 Hardware & Software Setup
+Each VM had 2 CPUs and 4 GB of RAM. The IP addresses in `nginx/nginx.conf` and `data/ontology.py` are from that lab network; change them to run it elsewhere.
 
-| Component         | Specs (CPUs / RAM) | Purpose                           |
-|------------------|--------------------|-----------------------------------|
-| Router VM        | 2 CPUs / 4 GB      | nginx Load Balancer               |
-| Execution VM 1   | 2 CPUs / 4 GB      | Go Server + Docker                |
-| Execution VM 2   | 2 CPUs / 4 GB      | Rust Server + Docker              |
-| MongoDB VM       | 2 CPUs / 4 GB      | Data persistence                  |
+## Ideas not built
 
----
+A web editor, support for more languages, rate limiting, and live container metrics.
 
-## 🗃️ Database Schema
+## Team
 
-### Users Collection
-```json
-{
-  "user_id": "UUID",
-  "email": "example@mail.com",
-  "password_hash": "hashed_pw",
-  "session_token": "JWT_token"
-}
-```
-
-### Code Collection
-```json
-{
-  "user_id": "UUID",
-  "file_name": "main.go",
-  "code": "package main...",
-  "execution_logs": "...",
-  "output": "Hello, World!"
-}
-```
-
----
-
-## 📈 Future Enhancements
-
-- 🌍 Add Web UI for code editing and execution
-- 🧠 AI-powered code anomaly detection
-- 📊 Real-time container metrics & visualization
-- 🌐 Multi-language support (Python, C++, etc.)
-- 🛡️ Rate limiting and DoS protection
-
----
-
-### 📘 Academic Context
-
-> This project was developed as part of **CSE540 - Cloud Computing**. Group members: **Dhairya Shah, Aayushi Shah, Khwahish Patel, Krishang Shah, and Vraj Desai**.
-
----
-
-## 💬 Feedback & Contribution
-
-Pull requests, issue reports, and suggestions are welcome!  
-If you'd like to contribute, please fork the repo and submit a PR.
-
----
+Dhairya Shah, Aayushi Shah, Khwahish Patel, Krishang Shah and Vraj Desai.
